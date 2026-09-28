@@ -1,8 +1,8 @@
 name: Do Tools Sync For Abldg
 
 on:
-  schedule:
-    - cron: '10 4 12 * *'
+  # schedule:
+  #   - cron: '10 4 12 * *'  # 已屏蔽,不再定时执行
   workflow_dispatch:
     inputs:
       binvern:

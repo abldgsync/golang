@@ -1,0 +1,152 @@
+name: Do Tools Sync For Abldg
+
+on:
+  schedule:
+    - cron: '10 4 12 * *'
+  workflow_dispatch:
+    inputs:
+      binvern:
+        description: '指定 Golang 版本号(如 1.25.0 或 go1.25.0,不填则使用最新稳定版)'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+# 并发控制:同一时间只允许一个同步任务运行,避免重复发布冲突
+concurrency:
+  group: full-sync
+  cancel-in-progress: false
+
+env:
+  DOWNLOAD_JOBS: 8          # 并行下载数
+  BASE_URL: https://go.dev/dl/
+  TMP_JSON: dl.json
+
+jobs:
+  sync_binaries:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: 拉取仓库代码
+        uses: actions/checkout@v7
+
+      - name: 解析版本并生成下载清单
+        id: plan
+        env:
+          WANT: ${{ inputs.binvern }}
+        run: |
+          set -euo pipefail
+
+          # 统一版本号写法: 1.25.0 -> go1.25.0
+          want=""
+          if [[ -n "${WANT:-}" ]]; then
+            want="go${WANT#go}"
+          fi
+
+          # 1. 拉取官网全量版本清单
+          if ! curl -4fsSLo "${TMP_JSON}" --retry 3 --retry-delay 2 \
+            --connect-timeout 15 --max-time 180 \
+            "${BASE_URL}?mode=json&include=all"; then
+            echo "::error::获取版本清单失败: ${BASE_URL}"
+            exit 1
+          fi
+
+          if ! jq -e 'type == "array" and length > 0' "${TMP_JSON}" >/dev/null 2>&1; then
+            echo "::error::获取的版本清单不是有效的JSON数组"
+            exit 1
+          fi
+
+          # 2. 定位版本:未指定取最新稳定版,指定则精确匹配;只认 stable=true
+          sel='.stable == true'
+          if [[ -n "${want}" ]]; then
+            sel="${sel} and .version == \"${want}\""
+          fi
+          VN="$(jq -r "map(select(${sel})) | first | .version // empty" "${TMP_JSON}")"
+
+          if [[ -z "${VN}" ]]; then
+            echo "::error::未找到匹配的稳定版本${want:+: ${want}}"
+            exit 1
+          fi
+
+          # 兜底跳过 rc/beta/alpha
+          if [[ "${VN}" =~ (rc|beta|alpha) ]]; then
+            echo "::error::解析到预发布版本 ${VN},请显式指定稳定版本号"
+            exit 1
+          fi
+
+          # 3. 生成下载清单: "<sha256>  <文件名>"
+          #    校验值直接取自官网清单,无需为每个文件额外发请求
+          jq -r --arg vn "${VN}" 'map(select(.version == $vn)) | .[0].files[]?
+                                  | select(.sha256 != null and .sha256 != "")
+                                  | "\(.sha256)  \(.filename)"' \
+            "${TMP_JSON}" > "${RUNNER_TEMP}/manifest.sums"
+
+          if [[ ! -s "${RUNNER_TEMP}/manifest.sums" ]]; then
+            echo "::error::未找到任何可下载资源"
+            exit 1
+          fi
+
+          echo "version=v${VN#go}" >> "${GITHUB_OUTPUT}"
+          echo "goversion=${VN}" >> "${GITHUB_OUTPUT}"
+          echo "count=$(wc -l < "${RUNNER_TEMP}/manifest.sums")" >> "${GITHUB_OUTPUT}"
+          echo "base_url=${BASE_URL}" >> "${GITHUB_OUTPUT}"
+          echo "解析到版本: ${VN} ($(wc -l < "${RUNNER_TEMP}/manifest.sums") 个资源)"
+
+      - name: 并行下载全部二进制包
+        env:
+          JOBS: ${{ env.DOWNLOAD_JOBS }}
+          BASE: ${{ steps.plan.outputs.base_url }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+
+          download_one() {
+            local sum="$1" name="$2"
+            local url="${BASE}${name}"
+            for i in 1 2 3; do
+              if curl -4fL --retry 3 --retry-all-errors --retry-delay 2 \
+                    --connect-timeout 15 --max-time 1800 \
+                    -o "dist/${name}" "${url}"; then
+                return 0
+              fi
+              sleep $((i * 3))
+            done
+            echo "::error::下载失败: ${url}"
+            return 1
+          }
+          export -f download_one
+
+          # 清单每行: "<sha256>  <文件名>",取两列并行下载,任一失败即整体失败
+          xargs -P "${JOBS}" -n 2 bash -c 'download_one "$@"' _ < "${RUNNER_TEMP}/manifest.sums"
+          echo "下载完成,文件数: $(find dist -type f | wc -l)"
+
+      - name: 校验 SHA256
+        run: |
+          set -euo pipefail
+          cd dist
+          sha256sum -c "${RUNNER_TEMP}/manifest.sums"
+          {
+            echo "### Golang ${{ steps.plan.outputs.goversion }}"
+            echo ""
+            echo "共 ${{ steps.plan.outputs.count }} 个文件,SHA256 校验通过:"
+            echo ""
+            echo '```'
+            awk '{print $2}' "${RUNNER_TEMP}/manifest.sums"
+            echo '```'
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: 发布到 Releases
+        if: steps.plan.outputs.count != '0'
+        uses: softprops/action-gh-release@v3
+        with:
+          files: dist/*
+          tag_name: "${{ steps.plan.outputs.version }}" # 用版本号作为tag(如v1.25.0)
+          name: "Golang ${{ steps.plan.outputs.version }} Binaries"
+          body: |
+            同步自 Golang 官网的二进制程序
+            - 版本: ${{ steps.plan.outputs.goversion }}
+            - 官网下载地址: ${{ steps.plan.outputs.base_url }}
+            - 同步任务: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          overwrite_files: true
+          fail_on_unmatched_files: true

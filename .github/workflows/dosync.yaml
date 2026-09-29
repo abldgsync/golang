@@ -23,7 +23,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
+      - name: 检出私有共享动作
+        uses: actions/checkout@v7
+        with:
+          repository: abldgsync/shared_actions
+          ref: 1bd39c681fe95f4ad9c07c7bf3f54d0d3cd94680
+          token: ${{ secrets.SYNC_PAT }}   # 需有读取 shared_actions 权限的 PAT(建议设为组织级 Secret)
+          path: shared_actions
       - name: 同步 Golang 二进制
-        uses: abldgsync/shared_actions/sync_golang.yaml@1bd39c681fe95f4ad9c07c7bf3f54d0d3cd94680  # 必须写死:uses 不支持 ENV/表达式,仓库名+路径+SHA 均需硬编码
+        uses: ./shared_actions/sync_golang.yaml  # 本地路径:从私有库检出后引用,仓库保持私有
         with:
           binvern: ${{ inputs.binvern }}

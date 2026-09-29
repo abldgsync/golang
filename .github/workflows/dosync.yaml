@@ -24,6 +24,6 @@ jobs:
     timeout-minutes: 60
     steps:
       - name: 同步 Golang 二进制
-        uses: abldgsync/shared_actions/sync_golang.yaml@ebf207c2b4c8709aef87571787eb50242b683754
+        uses: abldgsync/shared_actions/sync_golang.yaml@1bd39c681fe95f4ad9c07c7bf3f54d0d3cd94680
         with:
           binvern: ${{ inputs.binvern }}

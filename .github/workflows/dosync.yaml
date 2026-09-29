@@ -1,8 +1,9 @@
 name: Do Tools Sync For Abldg
 
-# 共享同步逻辑位于私有仓库 shared_actions/sync_golang.yaml(组合 action)
-# 请将下方 OWNER 替换为你的 GitHub 组织/用户名
+# 共享同步逻辑位于私有仓库 shared_actions/sync_golang.yaml(组合 action,已钉 commit SHA 对应 v1)
 on:
+  # schedule:
+  #   - cron: '10 4 12 * *'  # 已屏蔽,不再定时执行
   workflow_dispatch:
     inputs:
       binvern:
@@ -23,6 +24,6 @@ jobs:
     timeout-minutes: 60
     steps:
       - name: 同步 Golang 二进制
-        uses: abldgsync/shared_actions/sync_golang.yaml@v1
+        uses: abldgsync/shared_actions/sync_golang.yaml@ebf207c2b4c8709aef87571787eb50242b683754
         with:
           binvern: ${{ inputs.binvern }}

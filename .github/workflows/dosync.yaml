@@ -1,6 +1,6 @@
 name: Do Tools Sync For Abldg
 
-# 共享同步逻辑位于私有仓库 shared_actions/sync_golang.yaml(组合 action,已钉 commit SHA 对应 v1)
+# 共享同步逻辑位于公共(Public)仓库 shared_actions/sync_golang.yaml(组合 action,已钉 commit SHA)
 on:
   # schedule:
   #   - cron: '10 4 12 * *'  # 已屏蔽,不再定时执行
@@ -23,14 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
-      - name: 检出私有共享动作
-        uses: actions/checkout@v7
-        with:
-          repository: abldgsync/shared_actions
-          ref: 1bd39c681fe95f4ad9c07c7bf3f54d0d3cd94680
-          token: ${{ secrets.SYNC_PAT }}   # 需有读取 shared_actions 权限的 PAT(建议设为组织级 Secret)
-          path: shared_actions
       - name: 同步 Golang 二进制
-        uses: ./shared_actions/sync_golang.yaml  # 本地路径:从私有库检出后引用,仓库保持私有
+        uses: abldgsync/shared_actions/sync_golang.yaml@1bd39c681fe95f4ad9c07c7bf3f54d0d3cd94680
         with:
           binvern: ${{ inputs.binvern }}

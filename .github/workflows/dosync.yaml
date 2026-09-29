@@ -1,6 +1,6 @@
 name: Do Tools Sync For Abldg
 
-# 共享同步逻辑位于公共(Public)仓库 shared_actions/sync_golang.yaml(组合 action,已钉 commit SHA)
+# 共享同步逻辑位于公共(Public)仓库 .sacts/sync_golang.yaml(组合 action,已钉 commit SHA)
 on:
   # schedule:
   #   - cron: '10 4 12 * *'  # 已屏蔽,不再定时执行
@@ -24,6 +24,6 @@ jobs:
     timeout-minutes: 60
     steps:
       - name: 同步 Golang 二进制
-        uses: abldgsync/shared_actions/sync_golang@main
+        uses: abldgsync/.sacts/sync_golang@main
         with:
           binvern: ${{ inputs.binvern }}

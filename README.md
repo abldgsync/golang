@@ -4,7 +4,7 @@
 
 ## 工作原理
 
-同步流程由 `.github/workflows/dosync.yaml` 定义,核心步骤如下:
+同步流程由本仓库 `.github/workflows/dosync.yaml` 触发,实际同步逻辑实现于共享组合 Action `abldgsync/actions/golang`(其 `dosync.sh` 按 `CS=1~4` 阶段执行);本仓库工作流仅负责调用与传参。核心步骤如下:
 
 1. **解析版本并生成下载清单**
    - 一次性拉取官网全量版本清单 `https://go.dev/dl/?mode=json&include=all`(清单按版本号降序),未指定版本时取最新稳定版,指定版本时按 `version` 精确匹配,且只认 `stable=true` 的条目.
@@ -16,7 +16,7 @@
 
 ## 触发方式
 
-- **定时触发**:每周四凌晨 4:30(`30 4 * * 4`)自动执行,使用最新稳定版.
+- **定时触发**:`schedule` 已预留(每月 12 号凌晨 4:10 `10 4 12 * *`,默认注释),取消注释即可启用,使用最新稳定版.
 - **手动触发**(`workflow_dispatch`):可在 Actions 页面手动运行,支持以下输入参数:
 
 | 参数 | 说明 | 必填 | 示例 |
